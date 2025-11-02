@@ -22,5 +22,6 @@ public class Main {
         }
 
         parser.print();
+        System.out.println("Hello world");
     }
 }
