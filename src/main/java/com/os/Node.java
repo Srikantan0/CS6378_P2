@@ -4,6 +4,9 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.PriorityQueue;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.locks.Lock;
 
 public class Node implements Serializable {
     private final int nodeId;
@@ -12,6 +15,12 @@ public class Node implements Serializable {
 
     private final List<Integer> quorum = new ArrayList<>();
     private List<Node> neighbors = new ArrayList<>();
+
+    private boolean isLocked = false;
+    public Lock lockNode;
+    private int seqnum = 0;
+    private NodeState nodeState = NodeState.REQUESTING;
+    private List<Integer> recReplies = new ArrayList<>();
 
 
     Node(int nodeId, String hostName, int port, int totalNodes){
@@ -69,5 +78,29 @@ public class Node implements Serializable {
 
     public void setNeighbors(List<Node> neighbors) {
         this.neighbors = neighbors;
+    }
+
+    public NodeState getNodeState(){
+        return this.nodeState;
+    }
+
+    public void setNodeState(NodeState nodeState){
+        this.nodeState = nodeState;
+    }
+
+    public int getSeqnum(){
+        return this.seqnum;
+    }
+
+    public void incrementSeqNum(){
+        ++this.seqnum;
+    }
+
+    public List<Integer> getRecdReplies(){
+        return this.recReplies;
+    }
+
+    public void addReplyMessage(int nodeId){
+        this.recReplies.add(nodeId);
     }
 }
