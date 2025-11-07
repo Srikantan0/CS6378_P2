@@ -2,10 +2,8 @@ package com.os;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.PriorityQueue;
-import java.util.concurrent.PriorityBlockingQueue;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 
 public class Node implements Serializable {
@@ -17,10 +15,14 @@ public class Node implements Serializable {
     private List<Node> neighbors = new ArrayList<>();
 
     private boolean isLocked = false;
+    private Request lockingRequest = new Request();
     public Lock lockNode;
     private int seqnum = 0;
     private NodeState nodeState = NodeState.REQUESTING;
     private List<Integer> recReplies = new ArrayList<>();
+
+    private boolean didAnyQMemFail = false;
+    private boolean isInCs = false;
 
 
     Node(int nodeId, String hostName, int port, int totalNodes){
@@ -102,5 +104,37 @@ public class Node implements Serializable {
 
     public void addReplyMessage(int nodeId){
         this.recReplies.add(nodeId);
+    }
+
+    public Node getNodeById(int nodeId){
+        return neighbors.get(nodeId);
+    }
+
+    public void resetNodeLock(){
+        this.lockingRequest = new Request();
+    }
+
+    public Request getLockingRequest() {
+        return lockingRequest;
+    }
+
+    public void setLockingRequest(Request lockingRequest) {
+        this.lockingRequest = lockingRequest;
+    }
+
+    public boolean isLockedForARequest() {
+        return Objects.equals(getLockingRequest(), new Request());
+    }
+
+    public boolean isDidAnyQMemFail() {
+        return didAnyQMemFail;
+    }
+
+    public boolean isInCs() {
+        return isInCs;
+    }
+
+    public void setInCs(boolean inCs) {
+        isInCs = inCs;
     }
 }

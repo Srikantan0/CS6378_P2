@@ -23,6 +23,7 @@ public class MaekawaProtocol {
     }
 
     private Set<Integer> lockedProc = emptySet();
+    private final TCPClient tcpClient = new TCPClient();
 
     private void csEnter(){
         /*
@@ -34,6 +35,7 @@ public class MaekawaProtocol {
         * but what if the request gets a fail?
         * */
         currNode.lockNode.lock();
+        System.out.println("MaekawaProtocol | Starting to request CS enter");
         try {
             currNode.setNodeState(REQUESTING);
             Request reqToSend = new Request(currNode.getSeqnum(), currNode.getNodeId());
@@ -45,23 +47,34 @@ public class MaekawaProtocol {
             while(currNode.getRecdReplies().size() < currNode.getQuorum().size()){
                 csGrantForProc.await();
             }
+            System.out.println("MaekawaProtocol | Got all replies. exxecuting CS now");
             currNode.setNodeState(NodeState.EXEC);
             executeCriticalSection(currNode);
-        } catch (InterruptedException e) {}
+        } catch (InterruptedException e) {
+            System.out.println("MaekawaProtocol | Got Exception");
+        }
         finally {
             currNode.lockNode.unlock();
         }
     }
 
     private void executeCriticalSection(Node currNode) {
-        System.out.println(currNode.getNodeId() + "'th node in CS");
+        System.out.println("MaekawaProtocol | " + currNode.getNodeId() + "'th node in CS");
     }
 
     private void sendRequestToQurom(Node currNode, Request req) {
         List<Integer> quorum = currNode.getQuorum();
+        System.out.println("MaekawaProtocol | got quorum of node");
         for(int q:quorum){
+            Node dest = currNode.getNodeById(q);
+            System.out.println("MaekawaProtocol | sending request to quorum member" + " q");
             Message msg = new Message(MessageType.REQUEST, currNode.getNodeId(), q, req);
-            //tcpClient.sendMessage(q, msg)
+            try {
+                tcpClient.sendMessage(dest, msg);
+                System.out.println("MaekawaProtocol | Successful send");
+            } catch (Exception e) {
+                System.out.println("MaekawaProtocol | Exception");
+            }
         }
     }
 
@@ -87,5 +100,6 @@ public class MaekawaProtocol {
             //tcpClient.sendMessage(toId, msg)
         }
     }
+
 
 }
