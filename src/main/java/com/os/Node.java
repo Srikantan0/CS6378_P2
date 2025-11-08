@@ -1,9 +1,8 @@
 package com.os;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.locks.Lock;
 
 public class Node implements Serializable {
@@ -12,6 +11,7 @@ public class Node implements Serializable {
     private final int port;
 
     private final List<Integer> quorum = new ArrayList<>();
+    private final List<Integer> lockedQuoMemebrs = new ArrayList<>();
     private List<Node> neighbors = new ArrayList<>();
 
     private boolean isLocked = false;
@@ -22,7 +22,10 @@ public class Node implements Serializable {
     private List<Integer> recReplies = new ArrayList<>();
 
     private boolean didAnyQMemFail = false;
+    private List<Integer> failedQuoMembers = new ArrayList<>();
     private boolean isInCs = false;
+
+    private PriorityQueue<Node> waitQueue = new PriorityQueue<>();
 
 
     Node(int nodeId, String hostName, int port, int totalNodes){
@@ -136,5 +139,41 @@ public class Node implements Serializable {
 
     public void setInCs(boolean inCs) {
         isInCs = inCs;
+    }
+
+    public PriorityQueue<Node> getWaitQueue() {
+        return waitQueue;
+    }
+
+    public void setWaitQueue(PriorityQueue<Node> waitQueue) {
+        this.waitQueue = waitQueue;
+    }
+
+    public Node popWaitQueue(){
+        return this.waitQueue.peek();
+    }
+
+    public void queueNode(Node nodeToQueue){
+        this.waitQueue.add(nodeToQueue);
+    }
+
+    public List<Integer> getLockedQuoMemebrs() {
+        return lockedQuoMemebrs;
+    }
+
+    public void addToLockedMembers(int nodeId){
+        this.lockedQuoMemebrs.add(nodeId);
+    }
+
+    public List<Integer> getFailedQuoMembers() {
+        return failedQuoMembers;
+    }
+
+    public void setFailedQuoMembers(List<Integer> failedQuoMembers) {
+        this.failedQuoMembers = failedQuoMembers;
+    }
+
+    public void trackFailedRcv(int nodeId){
+        this.failedQuoMembers.add(nodeId);
     }
 }

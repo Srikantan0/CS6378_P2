@@ -7,6 +7,7 @@ import java.net.Socket;
 
 public class TCPServer implements Runnable{
     private Node node; // server belongs to this node
+    TCPClient tcpClient = new TCPClient();
 
     @Override
     public void run(){
@@ -55,19 +56,15 @@ public class TCPServer implements Runnable{
             // else if -1 incoming is higher priority -> send inquiry
             if(currReq.whoHasPriority(incmngReq).equals(currReq)){
                 Node requester = node.getNodeById(incmngReq.nodeId);
-                TCPClient tcpClient = new TCPClient();
                 tcpClient.sendFailed(node, requester);
             }else{
                 Node reqInquiry = node.getNodeById(currReq.nodeId);
-                TCPClient tcpClient = new TCPClient();
                 tcpClient.sendInquiry(node, reqInquiry);
             }
         }
     }
 
     private void onInquire(Message msg){ // server saw a inquire msg
-        Request req = (Request) msg.info;
-        TCPClient tcpClient = new TCPClient();
         if(node.isDidAnyQMemFail()){
             // relinquish control to whoever requested -> parent Node -> req.nodeId
             Node parentNode = node.getNodeById(msg.from);
@@ -84,6 +81,32 @@ public class TCPServer implements Runnable{
             * wait till either node gets a failed, or goes to cs -> put in queue
             * */
         }
+    }
+
+    private void onRelinquish(Message msg){
+        Request currentlyLockedReq = node.getLockingRequest();
+        Node nodeToWait = node.getNodeById(currentlyLockedReq.nodeId);
+        Node reqToServe = node.popWaitQueue();
+        node.queueNode(nodeToWait);
+        node.setLockingRequest(reqToServe.getLockingRequest());
+        tcpClient.sendLockedFor(node, reqToServe);
+    }
+
+    private void onLocked(Message locked){
+        // on rcv a locked, i will add this node to the list of locked members
+        // if all quo memebers have locked, then enter CS
+        // else what to do?
+        Request reqToLockFor = (Request) locked.info;
+        node.addToLockedMembers(reqToLockFor.nodeId);
+
+        if(node.getLockedQuoMemebrs().size() == node.getQuorum().size()){
+            //enter cs or send a message to say i can enter CS
+        }
+    }
+
+    private void onFailed(Message failure){
+        Request failedGuy = (Request) failure.info;
+        node.trackFailedRcv(failedGuy.nodeId);
     }
 
 }

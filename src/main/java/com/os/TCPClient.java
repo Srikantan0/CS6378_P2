@@ -85,4 +85,17 @@ public class TCPClient {
             System.out.println("TCPClient | encountered some exception during the send of a release message");
         }
     }
+
+    public void sendLockedFor(Node node, Node to) {
+        try{
+            s = new Socket(to.getHostName(), to.getNodeId());
+            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+            oos.flush();
+            Message lockedFor = new Message(LOCKED, node.getNodeId(), to.getNodeId(), node.getLockingRequest());
+            oos.writeObject(lockedFor);
+            oos.flush();
+        }catch(Exception e){
+
+        }
+    }
 }
