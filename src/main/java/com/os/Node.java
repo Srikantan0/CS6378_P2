@@ -153,6 +153,10 @@ public class Node implements Serializable {
         return this.waitQueue.peek();
     }
 
+    public void removeFromWaitQueue(Node nodeThatIsDoneWithCS){
+        this.waitQueue.remove(nodeThatIsDoneWithCS);
+    }
+
     public void queueNode(Node nodeToQueue){
         this.waitQueue.add(nodeToQueue);
     }

@@ -35,9 +35,15 @@ public class TCPServer implements Runnable{
                         onInquire(m);
                         break;
                     case RELEASE: //todo need to add individual methods to process at each level what type of message is seen; break;
-                    case RELINQUISH: //todo need to add individual methods to process at each level what type of message is seen; break;
-                    case FAILED: //todo need to add individual methods to process at each level what type of message is seen; break;
-                    case LOCKED: //todo need to add individual methods to process at each level what type of message is seen; break;
+                    case RELINQUISH:
+                        onRelinquish(m);
+                        break;
+                    case FAILED:
+                        onFailed(m);
+                        break;
+                    case LOCKED:
+                        onLocked(m);
+                        break;
                     default:
                         System.out.println("Err some other mesage recd");
                 }
@@ -107,6 +113,12 @@ public class TCPServer implements Runnable{
     private void onFailed(Message failure){
         Request failedGuy = (Request) failure.info;
         node.trackFailedRcv(failedGuy.nodeId);
+    }
+
+    private void onRelease(Message m){
+        Request procReleasingCs = (Request) m.info;
+        Node releasing = node.getNodeById(procReleasingCs.nodeId);
+        node.removeFromWaitQueue(releasing);
     }
 
 }
