@@ -4,7 +4,6 @@ import java.util.Set;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.locks.Condition;
 
-import static com.os.MessageType.RELEASE;
 import static com.os.NodeState.RELEASED;
 import static com.os.NodeState.REQUESTING;
 import static java.util.Collections.emptySet;
@@ -25,7 +24,7 @@ public class MaekawaProtocol {
     private Set<Integer> lockedProc = emptySet();
     private final TCPClient tcpClient = new TCPClient();
 
-    private void csEnter(){
+    public void csEnter(){
         /*
         * how does a process enter CS?
         * first request all quorum members -> if you get ok from all of them you can enter CS
@@ -87,17 +86,27 @@ public class MaekawaProtocol {
         currNode.lockNode.lock();
         try{
             currNode.setNodeState(RELEASED);
-            sendReleaseToQuorum(currNode);
+            sendReleaseToNextInQueue(currNode);
         }catch(Exception e){}
         finally {
             currNode.lockNode.unlock();
         }
     }
 
-    private void sendReleaseToQuorum(Node currNode) {
-        for(int toId: currNode.getQuorum()){
-            Message msg = new Message(RELEASE, currNode.getNodeId(), toId, currNode.getSeqnum());
-            //tcpClient.sendMessage(toId, msg)
+    private void sendReleaseToNextInQueue(Node currNode) {
+        /*
+        * unlock curNode
+        * do i have any outstanding req? if yes lock and send
+        * else unlock and die
+        * */
+        currNode.resetNodeLock();
+        if(currNode.getWaitQueue().isEmpty()){
+            currNode.setLocked(false);
+        } else {
+            Request nextReqInQueue = currNode.popWaitQueue();
+            Node to = currNode.getNodeById(nextReqInQueue.nodeId);
+            currNode.setLockingRequest(nextReqInQueue);
+            tcpClient.sendLockedFor(currNode, to);
         }
     }
 

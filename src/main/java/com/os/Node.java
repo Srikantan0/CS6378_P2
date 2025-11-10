@@ -2,7 +2,6 @@ package com.os;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.locks.Lock;
 
 public class Node implements Serializable {
@@ -25,7 +24,10 @@ public class Node implements Serializable {
     private List<Integer> failedQuoMembers = new ArrayList<>();
     private boolean isInCs = false;
 
-    private PriorityQueue<Node> waitQueue = new PriorityQueue<>();
+    private PriorityQueue<Request> waitQueue = new PriorityQueue<>();
+    private MaekawaProtocol mkwp = new MaekawaProtocol();
+    private boolean alreadyInquired = false;
+    private boolean alreadyRelease = false;
 
 
     Node(int nodeId, String hostName, int port, int totalNodes){
@@ -122,11 +124,12 @@ public class Node implements Serializable {
     }
 
     public void setLockingRequest(Request lockingRequest) {
+        setLocked(true);
         this.lockingRequest = lockingRequest;
     }
 
-    public boolean isLockedForARequest() {
-        return Objects.equals(getLockingRequest(), new Request());
+    public boolean isLocked() {
+        return isLocked;
     }
 
     public boolean isDidAnyQMemFail() {
@@ -141,15 +144,15 @@ public class Node implements Serializable {
         isInCs = inCs;
     }
 
-    public PriorityQueue<Node> getWaitQueue() {
+    public PriorityQueue<Request> getWaitQueue() {
         return waitQueue;
     }
 
-    public void setWaitQueue(PriorityQueue<Node> waitQueue) {
+    public void setWaitQueue(PriorityQueue<Request> waitQueue) {
         this.waitQueue = waitQueue;
     }
 
-    public Node popWaitQueue(){
+    public Request popWaitQueue(){
         return this.waitQueue.peek();
     }
 
@@ -157,8 +160,8 @@ public class Node implements Serializable {
         this.waitQueue.remove(nodeThatIsDoneWithCS);
     }
 
-    public void queueNode(Node nodeToQueue){
-        this.waitQueue.add(nodeToQueue);
+    public void queueRequest(Request reqToQueue){
+        this.waitQueue.add(reqToQueue);
     }
 
     public List<Integer> getLockedQuoMemebrs() {
@@ -179,5 +182,21 @@ public class Node implements Serializable {
 
     public void trackFailedRcv(int nodeId){
         this.failedQuoMembers.add(nodeId);
+    }
+
+    public MaekawaProtocol getMkwp() {
+        return mkwp;
+    }
+
+    public void setMkwp(MaekawaProtocol mkwp) {
+        this.mkwp = mkwp;
+    }
+
+    public void addReqToOutstandingQueue(Request req){
+        this.waitQueue.add(req);
+    }
+
+    public void setLocked(boolean locked) {
+        isLocked = locked;
     }
 }

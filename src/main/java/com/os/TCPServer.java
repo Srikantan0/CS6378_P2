@@ -7,7 +7,12 @@ import java.net.Socket;
 
 public class TCPServer implements Runnable{
     private Node node; // server belongs to this node
-    TCPClient tcpClient = new TCPClient();
+    TCPClient tcpClient;
+
+    TCPServer(Node node){
+        this.node = node;
+        tcpClient = new TCPClient();
+    }
 
     @Override
     public void run(){
@@ -34,7 +39,9 @@ public class TCPServer implements Runnable{
                     case INQUIRE:
                         onInquire(m);
                         break;
-                    case RELEASE: //todo need to add individual methods to process at each level what type of message is seen; break;
+                    case RELEASE:
+                        onRelease(m);
+                        break;
                     case RELINQUISH:
                         onRelinquish(m);
                         break;
@@ -53,18 +60,20 @@ public class TCPServer implements Runnable{
 
     private void onRequest(Message req){
         Request incmngReq = (Request) req.info;
-        if(!node.isLockedForARequest()){
+        if(!node.isLocked()){
             // not locked for any process, therefor i lock for requesting
             node.setLockingRequest(incmngReq); // this node is now locked for the requestnig guy
-            // sndReqToParent();
+            tcpClient.sendLockedFor(node, node.getNodeById(incmngReq.nodeId));
         } else{
             Request currReq = node.getLockingRequest();// if 1 -> curr is higher priortiy -> send FAILED
             // else if -1 incoming is higher priority -> send inquiry
+            Node lockedNode = node.getNodeById(currReq.nodeId);
+            node.addReqToOutstandingQueue(incmngReq);
             if(currReq.whoHasPriority(incmngReq).equals(currReq)){
                 Node requester = node.getNodeById(incmngReq.nodeId);
                 tcpClient.sendFailed(node, requester);
             }else{
-                Node reqInquiry = node.getNodeById(currReq.nodeId);
+                Node reqInquiry = lockedNode;
                 tcpClient.sendInquiry(node, reqInquiry);
             }
         }
@@ -90,12 +99,25 @@ public class TCPServer implements Runnable{
     }
 
     private void onRelinquish(Message msg){
-        Request currentlyLockedReq = node.getLockingRequest();
-        Node nodeToWait = node.getNodeById(currentlyLockedReq.nodeId);
-        Node reqToServe = node.popWaitQueue();
-        node.queueNode(nodeToWait);
-        node.setLockingRequest(reqToServe.getLockingRequest());
-        tcpClient.sendLockedFor(node, reqToServe);
+//        Request currentlyLockedReq = node.getLockingRequest();
+//        Node nodeToWait = node.getNodeById(currentlyLockedReq.nodeId);
+//        Node reqToServe = node.popWaitQueue();
+//        node.queueNode(nodeToWait);
+//        node.setLockingRequest(reqToServe.getLockingRequest());
+//        tcpClient.sendLockedFor(node, reqToServe);
+
+        /*
+        * when a node gets a relinquish -> its current node no longer has the node. therefore node.resetLock()
+        * once unlocked -> from priorityQueue get the most preceding request. node.lockFor(this request)
+        * sendLockedFor()
+        * */
+
+        Request currReq = node.getLockingRequest();
+        node.resetNodeLock();
+        Request reqToServe = node.popWaitQueue();
+        Node nodeBeingServedNext = node.getNodeById(reqToServe.nodeId);
+        node.setLockingRequest(reqToServe);
+        tcpClient.sendLockedFor(node, nodeBeingServedNext);
     }
 
     private void onLocked(Message locked){
@@ -106,7 +128,7 @@ public class TCPServer implements Runnable{
         node.addToLockedMembers(reqToLockFor.nodeId);
 
         if(node.getLockedQuoMemebrs().size() == node.getQuorum().size()){
-            //enter cs or send a message to say i can enter CS
+            node.getMkwp().csEnter();
         }
     }
 
@@ -116,9 +138,23 @@ public class TCPServer implements Runnable{
     }
 
     private void onRelease(Message m){
-        Request procReleasingCs = (Request) m.info;
-        Node releasing = node.getNodeById(procReleasingCs.nodeId);
-        node.removeFromWaitQueue(releasing);
+//        Request procReleasingCs = (Request) m.info;
+//        Node releasing = node.getNodeById(procReleasingCs.nodeId);
+//        node.removeFromWaitQueue(releasing);
+        /*
+        * when i get a release message -> remove the lock i currently have.
+        * then i pop queue and then lockfor that request
+        * tcpClient.sendLockedFor()
+        * if node.getWaitingQueue().isEmpty() node is unlocked.
+        * */
+        node.resetNodeLock();
+        Request reqInQueue = node.popWaitQueue();
+        Node nodeToServe = node.getNodeById(reqInQueue.nodeId);
+        tcpClient.sendLockedFor(node, nodeToServe);
+
+        if(node.getWaitQueue().isEmpty()){
+            node.setLocked(false);
+        }
     }
 
 }

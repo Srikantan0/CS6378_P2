@@ -62,7 +62,7 @@ public class TCPClient {
             System.out.println("TCPClient | node " + from.getNodeId() + " relinquishing lock to " + nodeToRelinquishTo.getNodeId());
             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
             oos.flush();
-            Message msg = new Message(RELINQUISH, from.getNodeId(), nodeToRelinquishTo.getNodeId(), from.getLockingRequest());
+            Message msg = new Message(RELINQUISH, from.getNodeId(), nodeToRelinquishTo.getNodeId(), nodeToRelinquishTo.getLockingRequest());
             oos.writeObject(msg);
             oos.flush();
             System.out.println("TCPClient | Relinquished control");
@@ -77,7 +77,7 @@ public class TCPClient {
             s = new Socket(to.getHostName(), to.getPort());
             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
             oos.flush();
-            Message rel = new Message(RELEASE, node.getNodeId(), to.getNodeId(), node.getLockingRequest());
+            Message rel = new Message(RELEASE, node.getNodeId(), to.getNodeId(), to.getLockingRequest());
             oos.writeObject(rel);
             oos.flush();
             System.out.println("TCPClient | Sent successfully");
@@ -96,6 +96,19 @@ public class TCPClient {
             oos.flush();
         }catch(Exception e){
 
+        }
+    }
+
+    public void sendRelease(Node from, Node to) {
+        Request releaseMsg = new Request(from.getSeqnum(), from.getNodeId());
+        try{
+            s = new Socket(to.getHostName(), to.getPort());
+            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+            oos.flush();
+            oos.writeObject(releaseMsg);
+            oos.flush();
+        }catch(IOException _){
+            System.out.println("TCPClient | some error sending release msg to : " + to.getNodeId());
         }
     }
 }
