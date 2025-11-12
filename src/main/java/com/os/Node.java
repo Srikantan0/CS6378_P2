@@ -2,7 +2,10 @@ package com.os;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static com.os.MessageType.FAILED;
 
 public class Node implements Serializable {
     private final int nodeId;
@@ -15,19 +18,17 @@ public class Node implements Serializable {
 
     private boolean isLocked = false;
     private Request lockingRequest = new Request();
-    public Lock lockNode;
+    public ReentrantLock lockNode; //todo use this lock's Condition get -> grant :: signal command
     private int seqnum = 0;
     private NodeState nodeState = NodeState.REQUESTING;
-    private List<Integer> recReplies = new ArrayList<>();
 
-    private boolean didAnyQMemFail = false;
-    private List<Integer> failedQuoMembers = new ArrayList<>();
+    private Map<Integer, Message> repliesMap = new HashMap<>();
+
     private boolean isInCs = false;
 
     private PriorityQueue<Request> waitQueue = new PriorityQueue<>();
     private MaekawaProtocol mkwp = new MaekawaProtocol();
-    private boolean alreadyInquired = false;
-    private boolean alreadyRelease = false;
+    private final Condition csGrant = lockNode.newCondition();
 
 
     Node(int nodeId, String hostName, int port, int totalNodes){
@@ -103,12 +104,12 @@ public class Node implements Serializable {
         ++this.seqnum;
     }
 
-    public List<Integer> getRecdReplies(){
-        return this.recReplies;
+    public Map<Integer, Message> getRecdReplies(){
+        return this.repliesMap;
     }
 
-    public void addReplyMessage(int nodeId){
-        this.recReplies.add(nodeId);
+    public void addReplyMessage(Message msg){
+        this.repliesMap.put(msg.from, msg);
     }
 
     public Node getNodeById(int nodeId){
@@ -116,7 +117,7 @@ public class Node implements Serializable {
     }
 
     public void resetNodeLock(){
-        this.lockingRequest = new Request();
+        this.lockingRequest = null;
     }
 
     public Request getLockingRequest() {
@@ -132,8 +133,10 @@ public class Node implements Serializable {
         return isLocked;
     }
 
-    public boolean isDidAnyQMemFail() {
-        return didAnyQMemFail;
+    public boolean didAnyQuorumMemFail() {
+        return repliesMap.values().stream().map(
+                reply -> reply.type
+        ).anyMatch(it -> it.equals(FAILED));
     }
 
     public boolean isInCs() {
@@ -172,18 +175,6 @@ public class Node implements Serializable {
         this.lockedQuoMemebrs.add(nodeId);
     }
 
-    public List<Integer> getFailedQuoMembers() {
-        return failedQuoMembers;
-    }
-
-    public void setFailedQuoMembers(List<Integer> failedQuoMembers) {
-        this.failedQuoMembers = failedQuoMembers;
-    }
-
-    public void trackFailedRcv(int nodeId){
-        this.failedQuoMembers.add(nodeId);
-    }
-
     public MaekawaProtocol getMkwp() {
         return mkwp;
     }
@@ -198,5 +189,9 @@ public class Node implements Serializable {
 
     public void setLocked(boolean locked) {
         isLocked = locked;
+    }
+
+    public Condition getCsGrant(){
+        return csGrant;
     }
 }
