@@ -11,6 +11,8 @@ public class Node implements Serializable {
     private final int nodeId;
     private final String hostName;
     private final int port;
+    private final int meanInterReqDelay;
+    private final int meanCsExecTime;
 
     private final List<Integer> quorum = new ArrayList<>();
     private final List<Integer> lockedQuoMemebrs = new ArrayList<>();
@@ -18,7 +20,7 @@ public class Node implements Serializable {
 
     private boolean isLocked = false;
     private Request lockingRequest = new Request();
-    public ReentrantLock lockNode; //todo use this lock's Condition get -> grant :: signal command
+    public ReentrantLock lockNode = new ReentrantLock(); //todo use this lock's Condition get -> grant :: signal command
     private int seqnum = 0;
     private NodeState nodeState = NodeState.REQUESTING;
 
@@ -27,14 +29,17 @@ public class Node implements Serializable {
     private boolean isInCs = false;
 
     private PriorityQueue<Request> waitQueue = new PriorityQueue<>();
-    private MaekawaProtocol mkwp = new MaekawaProtocol();
+    private MaekawaProtocol mkwp;
     private final Condition csGrant = lockNode.newCondition();
 
 
-    Node(int nodeId, String hostName, int port, int totalNodes){
+    Node(int nodeId, String hostName, int port, int meanInterReqDelay, int meanCsExecTime, int totalNodes){
         this.nodeId = nodeId;
         this.hostName = hostName;
         this.port = port;
+        this.meanInterReqDelay = meanInterReqDelay;
+        this.meanCsExecTime = meanCsExecTime;
+        mkwp = new MaekawaProtocol(this);
     }
 
     public int getNodeId(){
@@ -47,6 +52,10 @@ public class Node implements Serializable {
 
     public int getPort(){
         return this.port;
+    }
+
+    public void setQuorum(List<Integer> quo){
+        this.quorum.addAll(quo);
     }
 
     public List<Integer> getQuorum(){
@@ -108,12 +117,19 @@ public class Node implements Serializable {
         return this.repliesMap;
     }
 
+    public void clearRecdRepliesMap(){
+        System.out.println("Node | clearing map.. ");
+        this.repliesMap = new HashMap<>();
+    }
+
     public void addReplyMessage(Message msg){
         this.repliesMap.put(msg.from, msg);
     }
 
     public Node getNodeById(int nodeId){
-        return neighbors.get(nodeId);
+        return neighbors.stream().filter(
+                n -> n.nodeId == nodeId
+        ).findFirst().orElse(null);
     }
 
     public void resetNodeLock(){
@@ -156,7 +172,7 @@ public class Node implements Serializable {
     }
 
     public Request popWaitQueue(){
-        return this.waitQueue.peek();
+        return this.waitQueue.poll();
     }
 
     public void removeFromWaitQueue(Node nodeThatIsDoneWithCS){
@@ -193,5 +209,13 @@ public class Node implements Serializable {
 
     public Condition getCsGrant(){
         return csGrant;
+    }
+
+    public int getMeanInterReqDelay() {
+        return meanInterReqDelay;
+    }
+
+    public int getMeanCsExecTime() {
+        return meanCsExecTime;
     }
 }

@@ -46,6 +46,8 @@ public class Parser {
                             Integer.parseInt(inputTokens[0]),
                             inputTokens[1],
                             Integer.parseInt(inputTokens[2]),
+                            getMeanInterRequestDelay(),
+                            getCsExecTime(),
                             this.numOfNodes
                     );
                     this.nodesInNetwork.add(nodeConfig);
@@ -54,7 +56,8 @@ public class Parser {
                     int currentNodeId = nodesInNetwork.get(idxNode).getNodeId();
                     List<Integer> quorumOfNode = new ArrayList<>();
                     for (String inputToken : inputTokens) {
-                        quorumOfNode.add(Integer.parseInt(inputToken));
+                        int q = Integer.parseInt(inputToken);
+                        if(q != currentNodeId) quorumOfNode.add(q);
                     }
                     nodeAndQuorum.put(currentNodeId, quorumOfNode);
                 }
@@ -71,6 +74,7 @@ public class Parser {
     public void connectToNeighborasFromCOnfig() {
         for (Node node : nodesInNetwork) {
             List<Integer> neighborNodeIds = nodeAndQuorum.get(node.getNodeId());
+            System.out.println(neighborNodeIds);
             List<Node> neighborNodes = new ArrayList<>();
             if (neighborNodeIds != null) {
                 for (int neighborNodeId : neighborNodeIds) {
@@ -81,7 +85,7 @@ public class Parser {
                 }
             }
             node.getNeighbors().clear();
-            node.setNeighbors(neighborNodes);
+            node.setNeighbors(nodesInNetwork);
         }
     }
 
@@ -105,8 +109,8 @@ public class Parser {
         return nodesInNetwork;
     }
 
-    public Map<Integer, List<Integer>> getQuorumSetOfNode() {
-        return nodeAndQuorum;
+    public List<Integer> getQuorumSetOfNode(int nodeId) {
+        return nodeAndQuorum.get(nodeId);
     }
 
     public Node getNodeById(int nodeId){

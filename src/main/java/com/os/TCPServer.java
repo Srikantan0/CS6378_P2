@@ -6,7 +6,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class TCPServer implements Runnable{
-    private Node node; // server belongs to this node
+    private final Node node; // server belongs to this node
     TCPClient tcpClient;
 
     TCPServer(Node node){
@@ -22,16 +22,17 @@ public class TCPServer implements Runnable{
     }
 
     public void startServer() throws Exception{
+        System.out.println("TCPServer | attempting to listen on server. ");
         ServerSocket s = new ServerSocket(node.getPort());
-        try{
+        while(true){
             Socket sck = s.accept();
+            System.out.println("TCPServer | accepted server conection");
             ObjectInputStream ois = new ObjectInputStream(sck.getInputStream());
-            ObjectOutputStream oos = new ObjectOutputStream(sck.getOutputStream());
-            oos.flush();
 
             Object o = ois.readObject();
             if(o instanceof Message){
                 Message m = (Message) o;
+                System.out.println("TCPServer | recvd object " + m.type +" "+ m.info +" "+ m.from +" "+ m.to);
                 switch(m.type){
                     case REQUEST:
                         node.getMkwp().onRequest(m);
@@ -55,7 +56,6 @@ public class TCPServer implements Runnable{
                         System.out.println("Err some other mesage recd");
                 }
             }
-        }catch (Exception e) {}
+        }
     }
-
 }

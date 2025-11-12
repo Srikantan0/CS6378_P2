@@ -1,5 +1,7 @@
 package com.os;
 
+import java.io.Serializable;
+
 enum MessageType{
     REQUEST,
     RELEASE,
@@ -9,7 +11,7 @@ enum MessageType{
     FAILED
 }
 
-public class Message {
+public class Message implements Serializable {
     public MessageType type;
     public int from;
     public int to;

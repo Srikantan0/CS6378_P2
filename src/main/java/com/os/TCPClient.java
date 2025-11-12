@@ -14,6 +14,7 @@ public class TCPClient {
     TCPClient(){}
     public void sendMessage(Node dest, Message msg){
         try{
+            System.out.println("TCPClient | Attempting to send a request to node: " + dest.getNodeId());
             s = new Socket(dest.getHostName(), dest.getPort());
             System.out.println("TCPClient | Socket to " + dest.getNodeId() + " successful");
             ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
@@ -22,20 +23,20 @@ public class TCPClient {
             ois.flush();
             System.out.println("TCPClient | Sent message to " + dest.getNodeId() + ". ");
         } catch (Exception e) {
-            System.out.println("TCPClient | Got some Exception");
+            System.out.println("TCPClient | Got some Exception" + e);
         }
     }
 
     public void sendInquiry(Node from, Node to){
         try{
-            s = new Socket(to.getHostName(), to.getNodeId());
+            s = new Socket(to.getHostName(), to.getPort());
             System.out.println("TCPClient | Sending inquiry to Parent as node got higher priority request");
             ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
             ois.flush();
             Message inquiry = new Message(INQUIRE, from.getNodeId(), to.getNodeId(), to.getLockingRequest());
             ois.writeObject(inquiry);
             ois.flush();
-            System.out.println("TCPClient | Sent INQUIRY to to");
+            System.out.println("TCPClient | Sent INQUIRY to " + to.getNodeId());
         } catch (IOException e) {
             System.out.println("TCPClient | Got Exxcpetion when sending INQUIRY");
         }
@@ -43,16 +44,16 @@ public class TCPClient {
 
     public void sendFailed(Node from, Node requester) {
         try{
-            s = new Socket(requester.getHostName(), requester.getNodeId());
-            System.out.println("TCPClient | Sending inquiry to Parent as from got higher priority request");
+            s = new Socket(requester.getHostName(), requester.getPort());
+            System.out.println("TCPClient | Sending FAILED to Parent");
             ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
             ois.flush();
             Message inquiry = new Message(FAILED, from.getNodeId(), requester.getNodeId(), requester.getLockingRequest());
             ois.writeObject(inquiry);
             ois.flush();
-            System.out.println("TCPClient | Sent INQUIRY to to");
+            System.out.println("TCPClient | Sent FAILED to " + requester.getNodeId());
         } catch (IOException e) {
-            System.out.println("TCPClient | Got Exxcpetion when sending INQUIRY");
+            System.out.println("TCPClient | Got Exxcpetion when sending FAILED message");
         }
     }
 
@@ -88,14 +89,22 @@ public class TCPClient {
 
     public void sendLockedFor(Node node, Node to) {
         try{
-            s = new Socket(to.getHostName(), to.getNodeId());
+            System.out.println("TCPClient | Node " + node.getNodeId() + " sending a LOCKED request " + to.getNodeId());
+
+            System.out.println("TCPClient | Node " + node.getNodeId() +
+                    " sending LOCKED to node " + to.getNodeId() +
+                    " at " + to.getHostName() + ":" + to.getPort());
+
+            s = new Socket(to.getHostName(), to.getPort());
             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
             oos.flush();
             Message lockedFor = new Message(LOCKED, node.getNodeId(), to.getNodeId(), node.getLockingRequest());
             oos.writeObject(lockedFor);
             oos.flush();
+            System.out.println("TCPClient | snet LOCKED message. ");
         }catch(Exception e){
-
+            System.out.println("TCPClient | got some exception when sending locked message: " + e);
+            e.printStackTrace();
         }
     }
 

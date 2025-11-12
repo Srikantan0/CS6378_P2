@@ -1,6 +1,8 @@
 package com.os;
 
-public class Request implements Comparable<Request>{
+import java.io.Serializable;
+
+public class Request implements Comparable<Request>, Serializable {
     int seqnum;
     int nodeId;
 
