@@ -1,8 +1,9 @@
 package com.os;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.List;
-import java.util.Random;
-
-import com.os.NodeState.*;
 
 public class MaekawaProtocol implements Runnable{
     private Node currNode;
@@ -52,6 +53,7 @@ public class MaekawaProtocol implements Runnable{
             }
             System.out.println("MaekawaProtocol | Got all replies. exxecuting CS now");
             currNode.setNodeState(NodeState.EXEC);
+            writeLOG("ENTER");
             executeCriticalSection(currNode);
         } catch (InterruptedException e) {
             System.out.println("MaekawaProtocol | Got Exception");
@@ -96,7 +98,7 @@ public class MaekawaProtocol implements Runnable{
         try{
             currNode.setInCs(false);
             currNode.setNodeState(NodeState.RELEASED);
-//            sendReleaseToNextInQueue(currNode);
+            writeLOG("EXIT");
             for(int q:currNode.getQuorum()){
                 Node quorumNode = currNode.getNodeById(q);
                 tcpClient.sendReleaseToRequester(currNode, quorumNode);
@@ -255,6 +257,17 @@ public class MaekawaProtocol implements Runnable{
             sendReleaseToNextInQueue(currNode);
         } finally{
             currNode.lockNode.unlock();
+        }
+    }
+
+    public void writeLOG(String msg){
+        try(FileWriter f = new FileWriter("node"+currNode.getNodeId()+".log", true);
+            BufferedWriter w =new BufferedWriter(f);
+            PrintWriter o = new PrintWriter(w);
+        ) {
+            o.println(System.currentTimeMillis() + " -> Node: " + currNode.getNodeId() + " => " + msg);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }
