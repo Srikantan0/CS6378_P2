@@ -218,4 +218,14 @@ public class Node implements Serializable {
     public int getMeanCsExecTime() {
         return meanCsExecTime;
     }
+
+    public void seqnumupdate(int other){
+        this.seqnum = Math.max(this.seqnum, other) + 1;
+    }
+
+    public long countLockedReplies() {
+        return repliesMap.values().stream()
+                .filter(m -> m.type == MessageType.LOCKED)
+                .count();
+    }
 }

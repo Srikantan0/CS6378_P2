@@ -18,7 +18,9 @@ public class TCPServer implements Runnable{
     public void run(){
         try{
             startServer();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            System.out.println("TCPServer | Got exception : " + e);
+        }
     }
 
     public void startServer() throws Exception{

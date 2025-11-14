@@ -30,11 +30,9 @@ public class Main {
         parser.print();
         System.out.println("Hello world");
         new Thread(new TCPServer(currNode)).start();
-
-//        ApplicationLayer appLayer = new ApplicationLayer(currNode);
-//        ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
-//        ses.submit(appLayer);
-//        ses.scheduleAtFixedRate(appLayer, 0, 20, TimeUnit.SECONDS);
+        try{
+            Thread.sleep(1000);
+        }catch (Exception e){}
         new Thread(new ApplicationLayer(currNode)).start();
     }
 }
