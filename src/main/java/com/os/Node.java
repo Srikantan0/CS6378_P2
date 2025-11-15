@@ -31,14 +31,16 @@ public class Node implements Serializable {
     private PriorityQueue<Request> waitQueue = new PriorityQueue<>();
     private MaekawaProtocol mkwp;
     private final Condition csGrant = lockNode.newCondition();
+    private int numReqPerNode;
 
 
-    Node(int nodeId, String hostName, int port, int meanInterReqDelay, int meanCsExecTime, int totalNodes){
+    Node(int nodeId, String hostName, int port, int meanInterReqDelay, int meanCsExecTime, int numReqPerNode,int totalNodes){
         this.nodeId = nodeId;
         this.hostName = hostName;
         this.port = port;
         this.meanInterReqDelay = meanInterReqDelay;
         this.meanCsExecTime = meanCsExecTime;
+        this.numReqPerNode = numReqPerNode;
         mkwp = new MaekawaProtocol(this);
     }
 
@@ -227,5 +229,9 @@ public class Node implements Serializable {
         return repliesMap.values().stream()
                 .filter(m -> m.type == MessageType.LOCKED)
                 .count();
+    }
+
+    public int getNumReqPerNode() {
+        return this.numReqPerNode;
     }
 }

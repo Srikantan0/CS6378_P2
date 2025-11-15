@@ -48,6 +48,7 @@ public class Parser {
                             Integer.parseInt(inputTokens[2]),
                             getMeanInterRequestDelay(),
                             getCsExecTime(),
+                            numReqPerNode,
                             this.numOfNodes
                     );
                     this.nodesInNetwork.add(nodeConfig);

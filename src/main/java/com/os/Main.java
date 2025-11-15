@@ -34,5 +34,12 @@ public class Main {
             Thread.sleep(1000);
         }catch (Exception e){}
         new Thread(new ApplicationLayer(currNode)).start();
+
+        new Thread(() -> {
+            try {
+                Thread.sleep(60000);
+            } catch (InterruptedException e) {}
+            System.exit(0);
+        }).start();
     }
 }

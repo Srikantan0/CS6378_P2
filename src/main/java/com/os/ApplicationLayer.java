@@ -15,7 +15,8 @@ public class ApplicationLayer implements Runnable{
     }
 
     private void generateRandomCsRequests(){
-        while(true){
+        int numRequests = currNode.getNumReqPerNode();
+        for(int i = 0; i < numRequests; i++){
             try{
                 System.out.println("ApplicationLayer | inside the try block, about to generate CS requests");
                 long nodeGonnaGenReqIn = (long) exponentiateTime(currNode.getMeanInterReqDelay());
