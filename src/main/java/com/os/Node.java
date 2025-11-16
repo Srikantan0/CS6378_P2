@@ -19,6 +19,8 @@ public class Node implements Serializable {
     private final int nodeId;
     private final String hostName;
     private final int port;
+    private final int meanInterReqDelay;
+    private final int meanCsExecTime;
 
     // --- Maekawa Protocol State for Requesting Node ---
     private int seqnum = 0;
@@ -40,6 +42,10 @@ public class Node implements Serializable {
         this.nodeId = nodeId;
         this.hostName = hostName;
         this.port = port;
+        this.meanInterReqDelay = meanInterReqDelay;
+        this.meanCsExecTime = meanCsExecTime;
+        this.numReqPerNode = numReqPerNode;
+        mkwp = new MaekawaProtocol(this);
     }
 
     public int getNodeId(){
@@ -52,6 +58,10 @@ public class Node implements Serializable {
 
     public int getPort(){
         return this.port;
+    }
+
+    public void setQuorum(List<Integer> quo){
+        this.quorum.addAll(quo);
     }
 
     public List<Integer> getQuorum(){

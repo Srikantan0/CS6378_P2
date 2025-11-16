@@ -118,6 +118,8 @@ public class Main {
             LOGGER.log(Level.SEVERE, "Input node ID " + currNodeId + " does not match configuration.");
             return;
         }
+        List<Integer> quorumOfNode = parser.getQuorumSetOfNode(currNodeId);
+        currNode.setQuorum(quorumOfNode);
 
         // Initialize components
         TCPClient tcpClient = new TCPClient();

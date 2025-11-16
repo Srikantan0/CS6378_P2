@@ -43,6 +43,7 @@ public class MaekawaProtocol {
 
     public void csEnter() {
         currNode.lockNode.lock();
+        System.out.println("MaekawaProtocol | Sending request to all quorum members to enter CS");
         try {
             // 1. Prepare Request
             currNode.incrementSeqNum();
