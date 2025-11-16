@@ -2,28 +2,41 @@ package com.os;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
-import java.util.concurrent.PriorityBlockingQueue;
+import java.util.Set;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * Represents a node in the distributed system.
+ * Holds configuration data and local state relevant to the application/network.
+ */
 public class Node implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final int nodeId;
     private final String hostName;
     private final int port;
 
-    private final List<Integer> quorum = new ArrayList<>();
-    private List<Node> neighbors = new ArrayList<>();
-
-    private boolean isLocked = false;
-    public Lock lockNode;
+    // --- Maekawa Protocol State for Requesting Node ---
     private int seqnum = 0;
-    private NodeState nodeState = NodeState.REQUESTING;
-    private List<Integer> recReplies = new ArrayList<>();
+    private NodeState nodeState = NodeState.RELEASED;
+
+    // RENAMED TO MATCH THE GETTER: recReplies (Received Replies)
+    private final Set<Integer> recReplies = new HashSet<>();
+
+    // --- Concurrency Control ---
+    public final Lock lockNode = new ReentrantLock();
+    public final Condition csGrantForProc = lockNode.newCondition(); // Condition for csEnter() to await
+
+    // --- Network & Quorum Configuration ---
+    private final List<Integer> quorum = new ArrayList<>();
+    private List<Node> allNodes = new ArrayList<>(); // All nodes in the system (for communication)
 
 
-    Node(int nodeId, String hostName, int port, int totalNodes){
+    Node(int nodeId, String hostName, int port){
         this.nodeId = nodeId;
         this.hostName = hostName;
         this.port = port;
@@ -45,6 +58,49 @@ public class Node implements Serializable {
         return this.quorum;
     }
 
+    public void incrementSeqNum(){
+        this.seqnum++;
+    }
+
+    // Update Lamport clock with incoming message's timestamp
+    public void updateSeqNum(int incomingSeqNum) {
+        this.seqnum = Math.max(this.seqnum, incomingSeqNum) + 1;
+    }
+
+    public NodeState getNodeState(){
+        return this.nodeState;
+    }
+
+    public void setNodeState(NodeState nodeState){
+        this.nodeState = nodeState;
+    }
+
+    public int getSeqnum(){
+        return this.seqnum;
+    }
+
+    /**
+     * Corrected method: returns the 'recReplies' field.
+     */
+    public Set<Integer> getRecdReplies(){
+        return this.recReplies;
+    }
+
+    public List<Node> getAllNodes() {
+        return allNodes;
+    }
+
+    public void setAllNodes(List<Node> allNodes) {
+        this.allNodes = allNodes;
+    }
+
+    public Node getNodeById(int nodeId) {
+        return allNodes.stream()
+                .filter(n -> n.getNodeId() == nodeId)
+                .findFirst()
+                .orElse(null);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
@@ -62,45 +118,12 @@ public class Node implements Serializable {
         return java.util.Objects.hash(nodeId, hostName, port);
     }
 
-
-    public void shutdownNodeGracefullty() {
-        String configFileName = System.getProperty("configFileName");
-        if (configFileName == null) {
-            configFileName = "com/os/config.txt";
-        }
-        System.out.println("Node " + nodeId + " shutting down gracefully.");
-        System.exit(0);
-    }
-
-    public List<Node> getNeighbors() {
-        return neighbors;
-    }
-
-    public void setNeighbors(List<Node> neighbors) {
-        this.neighbors = neighbors;
-    }
-
-    public NodeState getNodeState(){
-        return this.nodeState;
-    }
-
-    public void setNodeState(NodeState nodeState){
-        this.nodeState = nodeState;
-    }
-
-    public int getSeqnum(){
-        return this.seqnum;
-    }
-
-    public void incrementSeqNum(){
-        ++this.seqnum;
-    }
-
-    public List<Integer> getRecdReplies(){
-        return this.recReplies;
-    }
-
-    public void addReplyMessage(int nodeId){
-        this.recReplies.add(nodeId);
+    @Override
+    public String toString() {
+        return "Node{" +
+                "nodeId=" + nodeId +
+                ", hostName='" + hostName + '\'' +
+                ", port=" + port +
+                '}';
     }
 }
