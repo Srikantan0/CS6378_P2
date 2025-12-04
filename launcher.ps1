@@ -11,7 +11,7 @@ $CONFIGLOCAL = "C:\Users\Srikantan\Downloads\config.txt"
 $OUTPUTDIR = "/tmp/dal660753/output"
 
 # JAR file (wildcard supported)
-$JAR_FILE = ".\target\node-1.0-SNAPSHOT.jar"
+$JAR_FILE = ".\target\Node-1.0-SNAPSHOT.jar"
 
 # --- Step 1: Read and preprocess configuration file ---
 $CONFIG = Get-Content $CONFIGLOCAL | ForEach-Object {
@@ -25,15 +25,13 @@ $NODES = @()
 
 foreach ($line in $CONFIG) {
     if ($i -eq 0) {
-        # Global parameters: n minPerActive maxPerActive minSendDelay snapshotDelay maxNumber
+        # Global parameters: n interRequestDelay csExecutionTime numOfRequests
         $tokens = $line -split '\s+'
         $n = [int]$tokens[0]
-        $minPerActive = $tokens[1]
-        $maxPerActive = $tokens[2]
-        $minSendDelay = $tokens[3]
-        $snapshotDelay = $tokens[4]
-        $maxNumber = $tokens[5]
-        Write-Host "[DEBUG] Global Params: {$n, $minPerActive, $maxPerActive, $minSendDelay, $snapshotDelay, $maxNumber}"
+        $interRequestDelay = $tokens[1]
+        $csExecutionTime = $tokens[2]
+        $numOfRequests = $tokens[3]
+        Write-Host "[DEBUG] Global Params: {$n, $interRequestDelay, $csExecutionTime, $numOfRequests}"
     }
     elseif ($i -le $n) {
         $NODES += $line
@@ -42,7 +40,7 @@ foreach ($line in $CONFIG) {
 }
 
 # --- Step 3: Deploy and run all nodes ---
-for ($i = $n - 1; $i -ge 0; $i--) {
+for ($i = 0; $i -lt $n; $i++) {
     $parts = $NODES[$i] -split '\s+'
     $id = $parts[0]
     $hostname = $parts[1]
@@ -61,7 +59,7 @@ for ($i = $n - 1; $i -ge 0; $i--) {
     scp $JAR_FILE $CONFIGLOCAL $remotePath
 
     # 3. Launch Java node in background
-    $remoteCmd = "java -jar $PROJDIR/node-1.0-SNAPSHOT.jar $id $PROJDIR/config.txt $OUTPUTDIR > $OUTPUTDIR/node-$id.log 2>&1 &"
+    $remoteCmd = "java -jar $PROJDIR/Node-1.0-SNAPSHOT.jar $id $PROJDIR/config.txt $OUTPUTDIR > $OUTPUTDIR/node-$id.log 2>&1 &"
     Write-Host "[DEBUG] ssh $netid@$hostname $remoteCmd"
     ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "$($netid)@$($hostname)" $remoteCmd
 

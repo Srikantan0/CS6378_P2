@@ -14,6 +14,7 @@ public class Parser {
     private int interRequestDelay;
     private int csExecTime;
     private int numReqPerNode;
+    private String outputDir;
 
     private List<Node> nodesInNetwork = new ArrayList<>();
     private final Map<Integer, List<Integer>> nodeAndQuorum = new HashMap<>();
@@ -124,5 +125,9 @@ public class Parser {
 
     public void print(){
         System.out.println(nodeAndQuorum);
+    }
+
+    public void setOutputDir(String outputDir) {
+        this.outputDir = outputDir;
     }
 }

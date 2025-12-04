@@ -1,123 +1,168 @@
 package com.os;
 
 import java.io.*;
+import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 
 import static com.os.MessageType.*;
 
+/**
+ * TCP Client with retry logic and proper socket handling for distributed systems.
+ * Key improvements:
+ * - Retry logic with exponential backoff for connection failures
+ * - Proper socket configuration (SO_REUSEADDR, timeouts)
+ * - Better exception handling for network issues common on DC servers
+ */
 public class TCPClient {
-    /*
-    * responsibilty of client is less -> i only need to send a message to the quo member regardless of what type it is
-    * server needs to be equipped to handle diff kinda messages
-    * */
-    Socket s;
-    TCPClient(){}
-    public void sendMessage(Node dest, Message msg){
-        try{
-            System.out.println("TCPClient | Attempting to send a request to node: " + dest.getNodeId());
-            s = new Socket(dest.getHostName(), dest.getPort());
-            System.out.println("TCPClient | Socket to " + dest.getNodeId() + " successful");
-            ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
-            ois.flush();
-            ois.writeObject(msg);
-            ois.flush();
-            System.out.println("TCPClient | Sent message to " + dest.getNodeId() + ". ");
-        } catch (Exception e) {
-            System.out.println("TCPClient | Got some Exception" + e);
+    private static final int MAX_RETRIES = 10;
+    private static final int INITIAL_RETRY_DELAY_MS = 500;
+    private static final int CONNECT_TIMEOUT_MS = 5000;
+    private static final int READ_TIMEOUT_MS = 10000;
+
+    public TCPClient() {}
+
+    /**
+     * Send a message to a destination node with retry logic.
+     * This is the core method that handles all the network complexity.
+     */
+    public void sendMessage(Node dest, Message msg) {
+        int attempt = 0;
+        int retryDelay = INITIAL_RETRY_DELAY_MS;
+
+        while (attempt < MAX_RETRIES) {
+            Socket socket = null;
+            try {
+                System.out.println("TCPClient | Attempting to send " + msg.type + " to node " + dest.getNodeId()
+                        + " at " + dest.getHostName() + ":" + dest.getPort() + " (attempt " + (attempt + 1) + ")");
+
+                // Create socket with proper configuration
+                socket = new Socket();
+                socket.setReuseAddress(true);  // Allows immediate reuse of port
+                socket.setSoTimeout(READ_TIMEOUT_MS);  // Read timeout
+                socket.setTcpNoDelay(true);  // Disable Nagle's algorithm for lower latency
+
+                // Connect with timeout
+                socket.connect(new InetSocketAddress(dest.getHostName(), dest.getPort()), CONNECT_TIMEOUT_MS);
+
+                // Send the message
+                ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
+                oos.flush();  // Flush the header
+                oos.writeObject(msg);
+                oos.flush();
+
+                System.out.println("TCPClient | Successfully sent " + msg.type + " to node " + dest.getNodeId());
+                return;  // Success - exit the retry loop
+
+            } catch (ConnectException e) {
+                attempt++;
+                System.out.println("TCPClient | Connection refused to node " + dest.getNodeId()
+                        + ". Retry " + attempt + "/" + MAX_RETRIES + " in " + retryDelay + "ms...");
+                sleep(retryDelay);
+                retryDelay = Math.min(retryDelay * 2, 5000);  // Exponential backoff, cap at 5 seconds
+
+            } catch (SocketException e) {
+                // Handle "Cannot assign requested address" (port exhaustion)
+                if (e.getMessage() != null && e.getMessage().contains("Cannot assign")) {
+                    attempt++;
+                    System.out.println("TCPClient | Port exhaustion detected. Waiting for ports to recycle... "
+                            + "Retry " + attempt + "/" + MAX_RETRIES);
+                    sleep(retryDelay * 2);  // Longer wait for port recycling
+                    retryDelay = Math.min(retryDelay * 2, 5000);
+                } else {
+                    attempt++;
+                    System.out.println("TCPClient | Socket error to node " + dest.getNodeId() + ": " + e.getMessage());
+                    sleep(retryDelay);
+                    retryDelay = Math.min(retryDelay * 2, 5000);
+                }
+
+            } catch (IOException e) {
+                attempt++;
+                System.out.println("TCPClient | IOException to node " + dest.getNodeId() + ": " + e.getMessage());
+                sleep(retryDelay);
+                retryDelay = Math.min(retryDelay * 2, 5000);
+
+            } finally {
+                // Always close the socket
+                if (socket != null && !socket.isClosed()) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        // Ignore close errors
+                    }
+                }
+            }
+        }
+
+        System.err.println("TCPClient | FAILED to send " + msg.type + " to node " + dest.getNodeId()
+                + " after " + MAX_RETRIES + " attempts!");
+    }
+
+    /**
+     * Helper method for sleeping with interrupt handling
+     */
+    private void sleep(int ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
-    public void sendInquiry(Node from, Node to){
-        try{
-            s = new Socket(to.getHostName(), to.getPort());
-            System.out.println("TCPClient | Sending inquiry to Parent as node got higher priority request");
-            ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
-            ois.flush();
-            Message inquiry = new Message(INQUIRE, from.getNodeId(), to.getNodeId(), to.getLockingRequest());
-            ois.writeObject(inquiry);
-            ois.flush();
-            System.out.println("TCPClient | Sent INQUIRY to " + to.getNodeId());
-        } catch (IOException e) {
-            System.out.println("TCPClient | Got Exxcpetion when sending INQUIRY");
-        }
+    /**
+     * Send an INQUIRE message to a node.
+     */
+    public void sendInquiry(Node from, Node to) {
+        Message inquiry = new Message(INQUIRE, from.getNodeId(), to.getNodeId(), from.getLockingRequest());
+        System.out.println("TCPClient | Sending INQUIRE from node " + from.getNodeId() + " to node " + to.getNodeId());
+        sendMessage(to, inquiry);
     }
 
+    /**
+     * Send a FAILED message to a requester.
+     */
     public void sendFailed(Node from, Node requester) {
-        try{
-            s = new Socket(requester.getHostName(), requester.getPort());
-            System.out.println("TCPClient | Sending FAILED to Parent");
-            ObjectOutputStream ois = new ObjectOutputStream(s.getOutputStream());
-            ois.flush();
-            Message inquiry = new Message(FAILED, from.getNodeId(), requester.getNodeId(), requester.getLockingRequest());
-            ois.writeObject(inquiry);
-            ois.flush();
-            System.out.println("TCPClient | Sent FAILED to " + requester.getNodeId());
-        } catch (IOException e) {
-            System.out.println("TCPClient | Got Exxcpetion when sending FAILED message");
-        }
+        Message failed = new Message(FAILED, from.getNodeId(), requester.getNodeId(), requester.getLockingRequest());
+        System.out.println("TCPClient | Sending FAILED from node " + from.getNodeId() + " to node " + requester.getNodeId());
+        sendMessage(requester, failed);
     }
 
+    /**
+     * Send a RELINQUISH message to yield a lock.
+     */
     public void sendRelinquish(Node from, Node nodeToRelinquishTo) {
-        try{
-            s = new Socket(nodeToRelinquishTo.getHostName(), nodeToRelinquishTo.getPort());
-            System.out.println("TCPClient | node " + from.getNodeId() + " relinquishing lock to " + nodeToRelinquishTo.getNodeId());
-            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-            oos.flush();
-            Message msg = new Message(RELINQUISH, from.getNodeId(), nodeToRelinquishTo.getNodeId(), nodeToRelinquishTo.getLockingRequest());
-            oos.writeObject(msg);
-            oos.flush();
-            System.out.println("TCPClient | Relinquished control");
-        } catch (IOException _){
-            System.out.println("TCPClient | Exception when relinquishing contorl");
-        }
+        Message relinquish = new Message(RELINQUISH, from.getNodeId(), nodeToRelinquishTo.getNodeId(),
+                nodeToRelinquishTo.getLockingRequest());
+        System.out.println("TCPClient | Sending RELINQUISH from node " + from.getNodeId()
+                + " to node " + nodeToRelinquishTo.getNodeId());
+        sendMessage(nodeToRelinquishTo, relinquish);
     }
 
+    /**
+     * Send a RELEASE message when leaving the critical section.
+     */
     public void sendReleaseToRequester(Node node, Node to) {
-        try{
-            System.out.println("TCPClient | Sending RELEASE Message to Node "+ to.getNodeId() +" to Release its lock");
-            s = new Socket(to.getHostName(), to.getPort());
-            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-            oos.flush();
-            Message rel = new Message(RELEASE, node.getNodeId(), to.getNodeId(), to.getLockingRequest());
-            oos.writeObject(rel);
-            oos.flush();
-            System.out.println("TCPClient | Sent successfully");
-        } catch(IOException _){
-            System.out.println("TCPClient | encountered some exception during the send of a release message");
-        }
+        Message release = new Message(RELEASE, node.getNodeId(), to.getNodeId(), to.getLockingRequest());
+        System.out.println("TCPClient | Sending RELEASE from node " + node.getNodeId() + " to node " + to.getNodeId());
+        sendMessage(to, release);
     }
 
+    /**
+     * Send a LOCKED message to grant permission.
+     */
     public void sendLockedFor(Node node, Node to) {
-        try{
-            System.out.println("TCPClient | Node " + node.getNodeId() + " sending a LOCKED request " + to.getNodeId());
-
-            System.out.println("TCPClient | Node " + node.getNodeId() +
-                    " sending LOCKED to node " + to.getNodeId() +
-                    " at " + to.getHostName() + ":" + to.getPort());
-
-            s = new Socket(to.getHostName(), to.getPort());
-            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-            oos.flush();
-            Message lockedFor = new Message(LOCKED, node.getNodeId(), to.getNodeId(), node.getLockingRequest());
-            oos.writeObject(lockedFor);
-            oos.flush();
-            System.out.println("TCPClient | snet LOCKED message. ");
-        }catch(Exception e){
-            System.out.println("TCPClient | got some exception when sending locked message: " + e);
-            e.printStackTrace();
-        }
+        Message locked = new Message(LOCKED, node.getNodeId(), to.getNodeId(), node.getLockingRequest());
+        System.out.println("TCPClient | Sending LOCKED from node " + node.getNodeId() + " to node " + to.getNodeId());
+        sendMessage(to, locked);
     }
 
+    /**
+     * Send a generic release message (legacy method).
+     */
     public void sendRelease(Node from, Node to) {
         Request releaseMsg = new Request(from.getSeqnum(), from.getNodeId());
-        try{
-            s = new Socket(to.getHostName(), to.getPort());
-            ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-            oos.flush();
-            oos.writeObject(releaseMsg);
-            oos.flush();
-        }catch(IOException _){
-            System.out.println("TCPClient | some error sending release msg to : " + to.getNodeId());
-        }
+        Message msg = new Message(RELEASE, from.getNodeId(), to.getNodeId(), releaseMsg);
+        sendMessage(to, msg);
     }
 }

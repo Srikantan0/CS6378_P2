@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-import argparse
 import glob
 import os
 import re
 from dataclasses import dataclass
 from typing import List, Set
+
+# Hardcoded output directory
+OUTPUT_DIRECTORY = r"/mnt/c/Users/Srikantan/Downloads/output"
 
 LOG_LINE_RE = re.compile(r"\s*(\d+)\s*->\s*Node:\s*(\d+)\s*=>\s*(ENTER|EXIT)\s*")
 
@@ -19,6 +21,11 @@ def parse_log_file(path: str) -> List[Event]:
     events: List[Event] = []
     print(f"Parsing {os.path.basename(path)} ...")
     with open(path, "r") as f:
+        first_line = f.readline().rstrip("\n")
+        print(f"  First line: {first_line}")
+
+        # rewind so parsing starts from the top again
+        f.seek(0)
         for lineno, line in enumerate(f, start=1):
             m = LOG_LINE_RE.match(line)
             if not m:
@@ -32,14 +39,14 @@ def parse_log_file(path: str) -> List[Event]:
 
 
 def load_all_events(directory: str) -> List[Event]:
-    pattern = os.path.join(directory, "node*.log")
+    pattern = os.path.join(directory, "node*.txt")
     files = sorted(glob.glob(pattern))
 
     if not files:
-        print(f"No node*.log files found in {os.path.abspath(directory)}")
+        print(f"No node*.txt files found in {os.path.abspath(directory)}")
         return []
 
-    print("Found log files:")
+    print("Found txt files:")
     for f in files:
         print("  ", os.path.basename(f))
 
@@ -96,18 +103,14 @@ def check_mutual_exclusion(events: List[Event]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Check mutual exclusion from node*.log files."
-    )
-    parser.add_argument(
-        "directory",
-        nargs="?",
-        default=".",
-        help="Directory containing node*.log files (default: current directory)",
-    )
-    args = parser.parse_args()
+    print(f"Loading events from: {OUTPUT_DIRECTORY}")
+    print("=" * 50)
 
-    events = load_all_events(args.directory)
+    if not os.path.exists(OUTPUT_DIRECTORY):
+        print(f"ERROR: Directory does not exist: {OUTPUT_DIRECTORY}")
+        return
+
+    events = load_all_events(OUTPUT_DIRECTORY)
     check_mutual_exclusion(events)
 
 

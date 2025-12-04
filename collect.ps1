@@ -8,10 +8,10 @@ $PROJDIR = "/home/012/g/gg/dal660753/TestProj"
 $CONFIGLOCAL = "C:\Users\Srikantan\Downloads\config.txt"
 
 # Remote output directory
-$OUTPUTDIR = "/tmp/dal660753/output"
+$OUTPUTDIR = "~/output"
 
-# JAR file (wildcard supported)
-$JAR_FILE = ".\target\Node-1.0-SNAPSHOT.jar"
+# Local output directory to collect files
+$LOCAL_OUTPUT = "C:\Users\Srikantan\Downloads\output"
 
 # --- Step 1: Pre-process configuration and store in a variable ---
 # Read config, remove comments and blank lines
@@ -36,11 +36,15 @@ foreach ($line in $CONFIG) {
         # Lines 1 to n: Node Configuration (ID, Host, Port)
         $NODES += $line
     }
-    # Ignore neighbor lines and any remaining lines for this cleanup stage
     $i++
 }
 
-# --- Step 3: Cleanup on all nodes ---
+# --- Step 3: Wait for termination and collect output ---
+# Ensure the local output directory exists before collecting files
+if (-not (Test-Path $LOCAL_OUTPUT)) {
+    New-Item -ItemType Directory -Path $LOCAL_OUTPUT -Force | Out-Null
+}
+
 for ($i = 0; $i -lt $n; $i++) {
     # Read node details from the array
     $nodeParams = $NODES[$i] -split '\s+'
@@ -50,9 +54,9 @@ for ($i = 0; $i -lt $n; $i++) {
 
     $sshTarget = "$netid@$hostName"
 
-    Write-Host "[DEBUG] Cleanup on Node $i config: id=$id host=$hostName port=$port"
-    Write-Host "[DEBUG] ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `"$sshTarget`" `"rm -rf $OUTPUTDIR/ && killall -u $netid`""
-    ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $sshTarget "rm -rf $OUTPUTDIR/ node*.log && killall -u $netid"
+    # Copy all files (logs and .out files) from the remote output directory to the local output
+    Write-Host "[DEBUG] scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `"${sshTarget}:$OUTPUTDIR/*`" `"$LOCAL_OUTPUT\`""
+    scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "${sshTarget}:$OUTPUTDIR/*" "$LOCAL_OUTPUT\"
 }
 
-Write-Host "Cleanup complete"
+Write-Host "[INFO] Output collection complete. Files are in $LOCAL_OUTPUT"
