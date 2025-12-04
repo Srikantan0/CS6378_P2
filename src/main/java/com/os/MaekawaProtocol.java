@@ -161,18 +161,21 @@ public class MaekawaProtocol implements Runnable{
     public void onInquire(Message msg) {
         currNode.lockNode.lock();
         try{
-            System.out.println("MaekawaProtocol |  received INQUIRE from node " + msg.from);
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received INQUIRE from node " + msg.from);
             deferNodes.put(msg.from, msg);
             if (currNode.isInCs()) {
                 System.out.println("MaekawaProtocol | Currently in CS. Deferring INQUIRE from " + msg.from);
                 return;
             }
             long failedCount = currNode.countFailedReplies();
+            System.out.println("MaekawaProtocol | Have " + failedCount + " FAILED replies");
+
             if (failedCount == 0) {
-                System.out.println("MaekawaProtocol | Nofails, deferring... " + msg.from);
+                System.out.println("MaekawaProtocol | No FAILED messages yet. Deferring RELINQUISH to " + msg.from);
                 return;
             }
-            System.out.println("MaekawaProtocol | yeilding to " + msg.from);
+            System.out.println("MaekawaProtocol | Have FAILED messages. Sending RELINQUISH to " + msg.from);
             deferNodes.remove(msg.from);
             currNode.getRecdReplies().remove(msg.from);
             tcpClient.sendRelinquish(currNode, currNode.getNodeById(msg.from));
@@ -184,22 +187,27 @@ public class MaekawaProtocol implements Runnable{
     public void onRelinquish(Message msg){
         currNode.lockNode.lock();
         try {
-            System.out.println("MaekawaProtocol |  received RELINQUISH from node " + msg.from);
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received RELINQUISH from node " + msg.from);
             Request currentReq = currNode.getLockingRequest();
             if (currentReq == null || currentReq.nodeId != msg.from) {
+                System.out.println("MaekawaProtocol | Unexpected RELINQUISH from " + msg.from
+                        + " (currently locked for " + (currentReq != null ? currentReq.nodeId : "none") + ")");
                 return;
             }
             currNode.addReqToOutstandingQueue(currentReq);
-            System.out.println("MaekawaProtocol | enqueued " + currentReq.nodeId + " request");
+            System.out.println("MaekawaProtocol | Placed request from " + currentReq.nodeId + " back in queue");
             if (currNode.getWaitQueue().isEmpty()) {
+                System.out.println("MaekawaProtocol | Queue is empty after relinquish. Unlocking.");
                 currNode.setLocked(false);
                 currNode.setLockingRequest(null);
                 return;
             }
             Request nextReq = currNode.popWaitQueue();
             currNode.setLockingRequest(nextReq);
-            System.out.println("MaekawaProtocol | locked for node " + nextReq.nodeId);
+            System.out.println("MaekawaProtocol | Now locked for node " + nextReq.nodeId);
             tcpClient.sendLockedFor(currNode, currNode.getNodeById(nextReq.nodeId));
+            System.out.println("MaekawaProtocol | Sent LOCKED to node " + nextReq.nodeId);
         } finally {
             currNode.lockNode.unlock();
         }
@@ -222,8 +230,9 @@ public class MaekawaProtocol implements Runnable{
             currNode.addToLockedMembers(locked.from);
             int lockedCount = Math.toIntExact(currNode.countLockedReplies());
             int quorumSize = currNode.getQuorum().size();
-            System.out.println("MaekawaProtocol | Total locked replies: " + lockedCount + "/" + quorumSize);
+            System.out.println("MaekawaProtocol | Total LOCKED replies: " + lockedCount + "/" + quorumSize);
             if (lockedCount >= quorumSize) {
+                System.out.println("MaekawaProtocol | Quorum complete! Signaling csEnter thread");
                 currNode.getCsGrant().signalAll();
             }
         } finally {
@@ -234,7 +243,8 @@ public class MaekawaProtocol implements Runnable{
     public void onFailed(Message failure){
         currNode.lockNode.lock();
         try {
-            System.out.println("MaekawaProtocol | received FAILED from node " + failure.from);
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received FAILED from node " + failure.from);
             Message existingReply = currNode.getRecdReplies().get(failure.from);
             if (existingReply != null && existingReply.type == MessageType.LOCKED) {
                 System.out.println("MaekawaProtocol | Ignoring stale FAILED - already have LOCKED from " + failure.from);
