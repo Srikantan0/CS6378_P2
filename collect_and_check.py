@@ -67,9 +67,9 @@ def verify_no_violations(events: List[Event]) -> None:
                 active.remove(ev.node_id)
 
     if isAnyViolating:
-        print(" X X X mutx violated, some nodes entered CS when other nodes were in CS X X X")
+        print(" X X X ..mutx violated, some nodes entered CS when other nodes were accessing it.. X X X")
     else:
-        print("√ √ √ no process violated mutex :D")
+        print("√ √ √ ..no instance of >1 proc in CS :D..")
 
 def main():
     events = load_all_events(OUTPUT_DIRECTORY)
