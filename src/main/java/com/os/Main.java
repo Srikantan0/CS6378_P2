@@ -2,22 +2,9 @@ package com.os;
 
 import java.util.List;
 
-/**
- * Main entry point for the Maekawa Mutual Exclusion Protocol.
- *
- * Usage: java com.os.Main <nodeId> <configFilePath> <outputDir>
- *
- * The program waits for a configurable delay before starting to allow
- * all nodes in the distributed system to launch.
- */
 public class Main {
-
-    // Delay to wait for other nodes to start (in milliseconds)
-    // On DC servers, nodes may take longer to start, so we use a longer delay
-    private static final long INIT_DELAY_MS = 30000;  // 30 seconds
-
-    // Grace period before program exits (to allow all nodes to complete)
-    private static final long SHUTDOWN_DELAY_MS = 120000;  // 2 minutes
+    private static final long INIT_DELAY_MS = 30000;
+    private static final long SHUTDOWN_DELAY_MS = 120000;
 
     public static void main(String[] args) throws InterruptedException {
         if (args.length < 2 || args.length > 3) {
