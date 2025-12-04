@@ -15,17 +15,6 @@ public class Request implements Comparable<Request>, Serializable {
     Request() {
     }
 
-    /**
-     * Compare requests for priority ordering.
-     * Lower (seqnum, nodeId) = HIGHER priority = should come FIRST in PriorityQueue
-     *
-     * PriorityQueue uses natural ordering where compareTo returning -1 means
-     * "this comes before other" (i.e., this has higher priority).
-     *
-     * @return negative if this has higher priority (should come first),
-     *         positive if other has higher priority,
-     *         zero if equal priority
-     */
     @Override
     public int compareTo(Request other) {
         // First compare by sequence number - lower seqnum = higher priority

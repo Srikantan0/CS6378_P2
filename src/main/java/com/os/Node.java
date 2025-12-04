@@ -15,23 +15,20 @@ public class Node implements Serializable {
     private final int port;
     private final int meanInterReqDelay;
     private final int meanCsExecTime;
-    private String outputDir = "output";  // Default output directory
+    private String outputDir = "output";
 
     private final List<Integer> quorum = new ArrayList<>();
     private final List<Integer> lockedQuoMembers = new ArrayList<>();
     private List<Node> neighbors = new ArrayList<>();
 
     private boolean isLocked = false;
-    private Request lockingRequest = null;  // Changed: initialize to null instead of empty Request
+    private Request lockingRequest = null;
     public ReentrantLock lockNode = new ReentrantLock();
     private int seqnum = 0;
-    private NodeState nodeState = NodeState.RELEASED;  // Changed: start in RELEASED state
+    private NodeState nodeState = NodeState.RELEASED;
 
-    // Changed to ConcurrentHashMap for thread safety
     private Map<Integer, Message> repliesMap = new ConcurrentHashMap<>();
-
     private boolean isInCs = false;
-
     private PriorityQueue<Request> waitQueue = new PriorityQueue<>();
     private MaekawaProtocol mkwp;
     private final Condition csGrant = lockNode.newCondition();
@@ -55,8 +52,6 @@ public class Node implements Serializable {
         this.meanCsExecTime = meanCsExecTime;
         this.numReqPerNode = numReqPerNode;
         this.outputDir = (outputDir != null && !outputDir.trim().isEmpty()) ? outputDir : "output";
-        System.out.println("Node | Created Node " + nodeId + " with outputDir: " + this.outputDir);
-        // FIX: Use this.outputDir (the validated value) instead of the parameter
         mkwp = new MaekawaProtocol(this, this.outputDir);
     }
 
@@ -215,10 +210,6 @@ public class Node implements Serializable {
         return this.waitQueue.poll();
     }
 
-    /**
-     * Peek at the head of the wait queue without removing it.
-     * @return the highest priority request in the queue, or null if empty
-     */
     public Request peekWaitQueue() {
         return this.waitQueue.peek();
     }
@@ -250,7 +241,6 @@ public class Node implements Serializable {
     }
 
     public void addReqToOutstandingQueue(Request req) {
-        // Avoid adding duplicates
         if (!this.waitQueue.contains(req)) {
             this.waitQueue.add(req);
         }
@@ -268,28 +258,16 @@ public class Node implements Serializable {
         return meanCsExecTime;
     }
 
-    /**
-     * Update sequence number using Lamport clock rules.
-     * seqnum = max(local, received) + 1
-     */
     public void seqnumupdate(int other) {
         this.seqnum = Math.max(this.seqnum, other) + 1;
     }
 
-    /**
-     * Count the number of LOCKED replies received.
-     * @return count of LOCKED messages in replies map
-     */
     public long countLockedReplies() {
         return repliesMap.values().stream()
                 .filter(m -> m.type == LOCKED)
                 .count();
     }
 
-    /**
-     * Count the number of FAILED replies received.
-     * @return count of FAILED messages in replies map
-     */
     public long countFailedReplies() {
         return repliesMap.values().stream()
                 .filter(m -> m.type == FAILED)
