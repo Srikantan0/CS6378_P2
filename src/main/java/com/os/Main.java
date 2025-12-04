@@ -7,8 +7,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Main {
-    public static void main(String[] args) throws InterruptedException {
-        Thread.sleep(30000);
+    public static void main(String[] args) {
+        new Thread(() -> {
+            try {
+                Thread.sleep(60000);
+            } catch (InterruptedException e) {}
+        }).start();
         if(args.length < 1|| args.length > 3){
             System.out.println("Provided either no nodeID, config file path or too many args"); return;
         }
@@ -35,12 +39,5 @@ public class Main {
             Thread.sleep(1000);
         }catch (Exception e){}
         new Thread(new ApplicationLayer(currNode)).start();
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(60000);
-            } catch (InterruptedException e) {}
-            System.exit(0);
-        }).start();
     }
 }
