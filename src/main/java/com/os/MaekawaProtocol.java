@@ -3,11 +3,15 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MaekawaProtocol implements Runnable{
     private Node currNode;
     private final TCPClient tcpClient = new TCPClient();
+    private final Map<Integer, Message> deferNodes = new ConcurrentHashMap<>();
 
     MaekawaProtocol(Node node){
         this.currNode = node;
@@ -16,18 +20,10 @@ public class MaekawaProtocol implements Runnable{
     @Override
     public void run() {
         System.out.println("MaekawaProtocol | Node " + currNode.getNodeId() + " about to enter CS.");
-        try {
-            System.out.println("MaekawaProtocol | Running TCPServer of node: " + currNode.getNodeId());
-//            TCPServer tcps = new TCPServer(currNode);
-//            tcps.run();
-        } catch (Exception e) {
-            System.out.println("MaekawaProtocol | Exception when starting my TCPServer");
-        }
         csEnter();
-
     }
 
-    private void csEnter(){
+    public void csEnter(){
         /*
         * how does a process enter CS?
         * first request all quorum members -> if you get ok from all of them you can enter CS
@@ -44,6 +40,7 @@ public class MaekawaProtocol implements Runnable{
             currNode.incrementSeqNum();
 
             currNode.clearRecdRepliesMap();
+            deferNodes.clear();
             System.out.println("MaekawaProtocol | recd replies size = " + currNode.getRecdReplies().size());
             sendRequestToQurom(currNode, reqToSend);
 
@@ -53,23 +50,16 @@ public class MaekawaProtocol implements Runnable{
             }
             System.out.println("MaekawaProtocol | Got all replies. exxecuting CS now");
             currNode.setNodeState(NodeState.EXEC);
+            currNode.setInCs(true);
             writeLOG("ENTER");
-            executeCriticalSection(currNode);
+//            executeCriticalSection(currNode);
         } catch (InterruptedException e) {
             System.out.println("MaekawaProtocol | Got Exception");
+            Thread.currentThread().interrupt();
         }
         finally {
             currNode.lockNode.unlock();
         }
-    }
-
-    private void executeCriticalSection(Node currNode) {
-        /*
-        * todo move this to the application layer level -> map protocol
-        * */
-        currNode.setInCs(true);
-        currNode.getCsGrant().signalAll();
-        System.out.println("MaekawaProtocol | " + currNode.getNodeId() + "'th node in CS");
     }
 
     private void sendRequestToQurom(Node currNode, Request req) {
@@ -77,13 +67,22 @@ public class MaekawaProtocol implements Runnable{
         System.out.println("MaekawaProtocol | got quorum of node: " + quorum);
         for(int q:quorum){
             Node dest = currNode.getNodeById(q);
-            System.out.println("MaekawaProtocol | sending request to quorum member" + " q");
             Message msg = new Message(MessageType.REQUEST, currNode.getNodeId(), q, req);
-            try {
-                tcpClient.sendMessage(dest, msg);
-                System.out.println("MaekawaProtocol | Successful send");
-            } catch (Exception e) {
-                System.out.println("MaekawaProtocol | Exception");
+            if (q == currNode.getNodeId()) {
+                System.out.println("MaekawaProtocol | snding to self");
+                currNode.lockNode.unlock();
+                try {
+                    onRequest(msg);
+                } finally {
+                    currNode.lockNode.lock();
+                }
+            } else {
+                try {
+                    tcpClient.sendMessage(dest, msg);
+                    System.out.println("MaekawaProtocol | Successful send");
+                } catch (Exception e) {
+                    System.out.println("MaekawaProtocol | Exception");
+                }
             }
         }
     }
@@ -96,33 +95,20 @@ public class MaekawaProtocol implements Runnable{
         * */
         currNode.lockNode.lock();
         try{
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId() + " leaving CS");
             currNode.setInCs(false);
             currNode.setNodeState(NodeState.RELEASED);
+            currNode.clearRecdRepliesMap();
+            deferNodes.clear();
             writeLOG("EXIT");
             for(int q:currNode.getQuorum()){
                 Node quorumNode = currNode.getNodeById(q);
                 tcpClient.sendReleaseToRequester(currNode, quorumNode);
             }
+            System.out.println("MaekawaProtocol | Sent RELEASE to all quorum members");
         }catch(Exception e){}
         finally {
             currNode.lockNode.unlock();
-        }
-    }
-
-    private void sendReleaseToNextInQueue(Node currNode) {
-        /*
-        * unlock curNode
-        * do i have any outstanding req? if yes lock and send
-        * else unlock and die
-        * */
-        currNode.resetNodeLock();
-        if(currNode.getWaitQueue().isEmpty()){
-            currNode.setLocked(false);
-        } else {
-            Request nextReqInQueue = currNode.popWaitQueue();
-            Node to = currNode.getNodeById(nextReqInQueue.nodeId);
-            currNode.setLockingRequest(nextReqInQueue);
-            tcpClient.sendLockedFor(currNode, to);
         }
     }
 
@@ -130,27 +116,41 @@ public class MaekawaProtocol implements Runnable{
         // todo add logs to start of each fn -> print message
         currNode.lockNode.lock();
         try{
-            Request incmngReq = (Request) req.info;
-            currNode.seqnumupdate(incmngReq.seqnum);
-            System.out.println("TCPServer | Node " + currNode.getNodeId() + "got a REQUEST message from node " + incmngReq.nodeId);
+            Request incomingReq = (Request) req.info;
+            currNode.seqnumupdate(incomingReq.seqnum);
+
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received REQUEST from node " + incomingReq.nodeId
+                    + " (seq=" + incomingReq.seqnum + ")");
+
             if(!currNode.isLocked()){
-                System.out.println("TCPServer | Node is currently unlocked... going to proceed with locking it");
-                // not locked for any process, therefor i lock for requesting
-                currNode.setLockingRequest(incmngReq); // this currNode is now locked for the requestnig guy
-                tcpClient.sendLockedFor(currNode, currNode.getNodeById(incmngReq.nodeId));
+                System.out.println("MaekawaProtocol | Node is UNLOCKED. Granting LOCKED to " + incomingReq.nodeId);
+                currNode.setLockingRequest(incomingReq);
+                currNode.setLocked(true);
+                tcpClient.sendLockedFor(currNode, currNode.getNodeById(incomingReq.nodeId));
+
             } else{
-                System.out.println("TCPServer | Node is locked. adding request to queue");
-                Request currReq = currNode.getLockingRequest();// if 1 -> curr is higher priortiy -> send FAILED
-                // else if -1 incoming is higher priority -> send inquiry
-                Node lockedNode = currNode.getNodeById(currReq.nodeId);
-                currNode.addReqToOutstandingQueue(incmngReq);
-                if(currReq.whoHasPriority(incmngReq).equals(currReq)){
-                    System.out.println("TCPServer | Current request served is higher priority. sending FAILED");
-                    Node requester = currNode.getNodeById(incmngReq.nodeId);
-                    tcpClient.sendFailed(currNode, requester);
-                }else{
-                    Node reqInquiry = lockedNode;
-                    tcpClient.sendInquiry(currNode, reqInquiry);
+                Request currentReq = currNode.getLockingRequest();
+                System.out.println("MaekawaProtocol | Node is LOCKED for node " + currentReq.nodeId
+                        + " (seq=" + currentReq.seqnum + ")");
+                currNode.addReqToOutstandingQueue(incomingReq);
+                System.out.println("MaekawaProtocol | Added REQUEST to queue (size: "
+                        + currNode.getWaitQueue().size() + ")");
+                if (incomingReq.precedes(currentReq)) {
+                    Request headOfQueue = currNode.peekWaitQueue();
+                    if (headOfQueue != null && incomingReq.equals(headOfQueue)) {
+                        System.out.println("MaekawaProtocol | Incoming has higher priority. Sending INQUIRE to "
+                                + currentReq.nodeId + " and FAILED to " + incomingReq.nodeId);
+                        tcpClient.sendInquiry(currNode, currNode.getNodeById(currentReq.nodeId));
+                        tcpClient.sendFailed(currNode, currNode.getNodeById(incomingReq.nodeId));
+                    }else{
+                        System.out.println("MaekawaProtocol | Incoming has higher priority but not at queue head. Sending FAILED");
+                        tcpClient.sendFailed(currNode, currNode.getNodeById(incomingReq.nodeId));
+                    }
+                } else {
+                    System.out.println("MaekawaProtocol | Current request has higher priority. Sending FAILED to "
+                            + incomingReq.nodeId);
+                    tcpClient.sendFailed(currNode, currNode.getNodeById(incomingReq.nodeId));
                 }
             }
         }finally {
@@ -158,54 +158,59 @@ public class MaekawaProtocol implements Runnable{
         }
     }
 
-    public void onInquire(Message msg){ // server saw a inquire msg
-//        if(currNode.didAnyQuorumMemFail()){
-//            // relinquish control to whoever requested -> parent Node -> req.nodeId
-//            Node parentNode = currNode.getNodeById(msg.from);
-//            tcpClient.sendRelinquish(currNode, parentNode);
-//        }
-//        currNode.getRecdReplies().put(msg.from, msg);
-            /* no LOCK failed. this means that the currNode got all required "locks" from the q members
-             * so the process could be in CS now. so cant give up lock now. therefore we wait??
-             * wait till CS exec is over.
-             * Node to = currNode.getNodeById(msg.from);
-             * tcpClient.sendReleaseToRequester(currNode, to);
-             * wait till either currNode gets a failed, or goes to cs -> put in queue
-             * */
+    public void onInquire(Message msg) {
         currNode.lockNode.lock();
         try{
-            currNode.addReplyMessage(msg);
-            if(!currNode.isInCs()){
-                Node parent = currNode.getNodeById(msg.from);
-                tcpClient.sendRelinquish(currNode, parent);
-                currNode.getRecdReplies().remove(msg.from);
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received INQUIRE from node " + msg.from);
+            deferNodes.put(msg.from, msg);
+            if (currNode.isInCs()) {
+                System.out.println("MaekawaProtocol | Currently in CS. Deferring INQUIRE from " + msg.from);
+                return;
             }
-            currNode.getCsGrant().signal();
+            long failedCount = currNode.countFailedReplies();
+            System.out.println("MaekawaProtocol | Have " + failedCount + " FAILED replies");
+
+            if (failedCount == 0) {
+                System.out.println("MaekawaProtocol | No FAILED messages yet. Deferring RELINQUISH to " + msg.from);
+                return;
+            }
+            System.out.println("MaekawaProtocol | Have FAILED messages. Sending RELINQUISH to " + msg.from);
+            deferNodes.remove(msg.from);
+            currNode.getRecdReplies().remove(msg.from);
+            tcpClient.sendRelinquish(currNode, currNode.getNodeById(msg.from));
         }finally{
             currNode.lockNode.unlock();
         }
     }
 
     public void onRelinquish(Message msg){
-//        Request currentlyLockedReq = currNode.getLockingRequest();
-//        Node nodeToWait = currNode.getNodeById(currentlyLockedReq.nodeId);
-//        Node reqToServe = currNode.popWaitQueue();
-//        currNode.queueNode(nodeToWait);
-//        currNode.setLockingRequest(reqToServe.getLockingRequest());
-//        tcpClient.sendLockedFor(currNode, reqToServe);
-
-        /*
-         * when a currNode gets a relinquish -> its current currNode no longer has the currNode. therefore currNode.resetLock()
-         * once unlocked -> from priorityQueue get the most preceding request. currNode.lockFor(this request)
-         * sendLockedFor()
-         * */
-
-        Request currReq = currNode.getLockingRequest();
-//        currNode.resetNodeLock();
-        Request reqToServe = currNode.popWaitQueue();
-        Node nodeBeingServedNext = currNode.getNodeById(reqToServe.nodeId);
-        currNode.setLockingRequest(reqToServe);
-        tcpClient.sendLockedFor(currNode, nodeBeingServedNext);
+        currNode.lockNode.lock();
+        try {
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received RELINQUISH from node " + msg.from);
+            Request currentReq = currNode.getLockingRequest();
+            if (currentReq == null || currentReq.nodeId != msg.from) {
+                System.out.println("MaekawaProtocol | Unexpected RELINQUISH from " + msg.from
+                        + " (currently locked for " + (currentReq != null ? currentReq.nodeId : "none") + ")");
+                return;
+            }
+            currNode.addReqToOutstandingQueue(currentReq);
+            System.out.println("MaekawaProtocol | Placed request from " + currentReq.nodeId + " back in queue");
+            if (currNode.getWaitQueue().isEmpty()) {
+                System.out.println("MaekawaProtocol | Queue is empty after relinquish. Unlocking.");
+                currNode.setLocked(false);
+                currNode.setLockingRequest(null);
+                return;
+            }
+            Request nextReq = currNode.popWaitQueue();
+            currNode.setLockingRequest(nextReq);
+            System.out.println("MaekawaProtocol | Now locked for node " + nextReq.nodeId);
+            tcpClient.sendLockedFor(currNode, currNode.getNodeById(nextReq.nodeId));
+            System.out.println("MaekawaProtocol | Sent LOCKED to node " + nextReq.nodeId);
+        } finally {
+            currNode.lockNode.unlock();
+        }
     }
 
     public void onLocked(Message locked){
@@ -219,22 +224,51 @@ public class MaekawaProtocol implements Runnable{
          * */
         currNode.lockNode.lock();
         try{
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received LOCKED from node " + locked.from);
             currNode.addReplyMessage(locked);
-            Request reqToLockFor = (Request) locked.info;
-            currNode.addToLockedMembers(reqToLockFor.nodeId);
-            currNode.getCsGrant().signalAll();
+            currNode.addToLockedMembers(locked.from);
+            int lockedCount = Math.toIntExact(currNode.countLockedReplies());
+            int quorumSize = currNode.getQuorum().size();
+            System.out.println("MaekawaProtocol | Total LOCKED replies: " + lockedCount + "/" + quorumSize);
+            if (lockedCount >= quorumSize) {
+                System.out.println("MaekawaProtocol | Quorum complete! Signaling csEnter thread");
+                currNode.getCsGrant().signalAll();
+            }
         } finally {
             currNode.lockNode.unlock();
         }
-
-
     }
 
     public void onFailed(Message failure){
         currNode.lockNode.lock();
         try {
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received FAILED from node " + failure.from);
+            Message existingReply = currNode.getRecdReplies().get(failure.from);
+            if (existingReply != null && existingReply.type == MessageType.LOCKED) {
+                System.out.println("MaekawaProtocol | Ignoring stale FAILED - already have LOCKED from " + failure.from);
+                return;
+            }
             currNode.addReplyMessage(failure);
-            Request failedGuy = (Request) failure.info;
+            if (!deferNodes.isEmpty()) {
+                System.out.println("MaekawaProtocol | Have " + deferNodes.size()
+                        + " deferred INQUIRE(s). Sending RELINQUISH for those with LOCKED status");
+                List<Integer> inquirersToRelinquish = new ArrayList<>();
+                for (Map.Entry<Integer, Message> entry : deferNodes.entrySet()) {
+                    int inquirerId = entry.getKey();
+                    Message reply = currNode.getRecdReplies().get(inquirerId);
+                    if (reply != null && reply.type == MessageType.LOCKED) {
+                        inquirersToRelinquish.add(inquirerId);
+                    }
+                }
+                for (int inquirerId : inquirersToRelinquish) {
+                    System.out.println("MaekawaProtocol | Sending RELINQUISH to node " + inquirerId);
+                    currNode.getRecdReplies().remove(inquirerId);
+                    deferNodes.remove(inquirerId);
+                    tcpClient.sendRelinquish(currNode, currNode.getNodeById(inquirerId));
+                }
+            }
             currNode.getCsGrant().signalAll();
         }  finally {
             currNode.lockNode.unlock();
@@ -254,7 +288,29 @@ public class MaekawaProtocol implements Runnable{
 //        currNode.resetNodeLock();
         currNode.lockNode.lock();
         try{
-            sendReleaseToNextInQueue(currNode);
+            System.out.println("MaekawaProtocol | Node " + currNode.getNodeId()
+                    + " received RELEASE from node " + m.from);
+            Request currentReq = currNode.getLockingRequest();
+            if (currentReq == null || currentReq.nodeId != m.from) {
+                System.out.println("MaekawaProtocol | Unexpected RELEASE from " + m.from
+                        + " (currently locked for " + (currentReq != null ? currentReq.nodeId : "none") + ")");
+                return;
+            }
+
+            currNode.resetNodeLock();
+            System.out.println("MaekawaProtocol | Lock cleared");
+            if (currNode.getWaitQueue().isEmpty()) {
+                System.out.println("MaekawaProtocol | No pending requests. Node is now UNLOCKED");
+                currNode.setLocked(false);
+            } else {
+                Request nextReq = currNode.popWaitQueue();
+                currNode.setLockingRequest(nextReq);
+                currNode.setLocked(true);
+                System.out.println("MaekawaProtocol | Serving next request from node " + nextReq.nodeId);
+
+                tcpClient.sendLockedFor(currNode, currNode.getNodeById(nextReq.nodeId));
+                System.out.println("MaekawaProtocol | Sent LOCKED to node " + nextReq.nodeId);
+            }
         } finally{
             currNode.lockNode.unlock();
         }

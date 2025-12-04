@@ -2,10 +2,12 @@ package com.os;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.os.MessageType.FAILED;
+import static com.os.MessageType.LOCKED;
 
 public class Node implements Serializable {
     private final int nodeId;
@@ -19,12 +21,11 @@ public class Node implements Serializable {
     private List<Node> neighbors = new ArrayList<>();
 
     private boolean isLocked = false;
-    private Request lockingRequest = new Request();
+    private Request lockingRequest = null;
     public ReentrantLock lockNode = new ReentrantLock(); //todo use this lock's Condition get -> grant :: signal command
     private int seqnum = 0;
-    private NodeState nodeState = NodeState.REQUESTING;
-
-    private Map<Integer, Message> repliesMap = new HashMap<>();
+    private NodeState nodeState = NodeState.RELEASED;
+    private Map<Integer, Message> repliesMap = new ConcurrentHashMap<>();
 
     private boolean isInCs = false;
 
@@ -81,7 +82,6 @@ public class Node implements Serializable {
         return java.util.Objects.hash(nodeId, hostName, port);
     }
 
-
     public void shutdownNodeGracefullty() {
         String configFileName = System.getProperty("configFileName");
         if (configFileName == null) {
@@ -120,8 +120,9 @@ public class Node implements Serializable {
     }
 
     public void clearRecdRepliesMap(){
-        System.out.println("Node | clearing map.. ");
-        this.repliesMap = new HashMap<>();
+        System.out.println("Node | clearing replies map... ");
+        this.repliesMap.clear();
+        this.lockedQuoMemebrs.clear();
     }
 
     public void addReplyMessage(Message msg){
@@ -129,6 +130,9 @@ public class Node implements Serializable {
     }
 
     public Node getNodeById(int nodeId){
+        if (nodeId == this.nodeId) {
+            return this;
+        }
         return neighbors.stream().filter(
                 n -> n.nodeId == nodeId
         ).findFirst().orElse(null);
@@ -136,6 +140,7 @@ public class Node implements Serializable {
 
     public void resetNodeLock(){
         this.lockingRequest = null;
+        this.isLocked = false;
     }
 
     public Request getLockingRequest() {
@@ -143,18 +148,23 @@ public class Node implements Serializable {
     }
 
     public void setLockingRequest(Request lockingRequest) {
-        setLocked(true);
         this.lockingRequest = lockingRequest;
+        if (lockingRequest != null) {
+            setLocked(true);
+        }
     }
 
     public boolean isLocked() {
         return isLocked;
     }
 
+    public void setLocked(boolean locked) {
+        isLocked = locked;
+    }
+
     public boolean didAnyQuorumMemFail() {
-        return repliesMap.values().stream().map(
-                reply -> reply.type
-        ).anyMatch(it -> it.equals(FAILED));
+        return repliesMap.values().stream()
+                .anyMatch(reply -> reply.type == FAILED);
     }
 
     public boolean isInCs() {
@@ -173,12 +183,16 @@ public class Node implements Serializable {
         this.waitQueue = waitQueue;
     }
 
-    public Request popWaitQueue(){
+    public Request popWaitQueue() {
         return this.waitQueue.poll();
     }
 
+    public Request peekWaitQueue() {
+        return this.waitQueue.peek();
+    }
+
     public void removeFromWaitQueue(Node nodeThatIsDoneWithCS){
-        this.waitQueue.remove(nodeThatIsDoneWithCS);
+        this.waitQueue.removeIf(req -> req.nodeId == nodeThatIsDoneWithCS.getNodeId());
     }
 
     public void queueRequest(Request reqToQueue){
@@ -190,7 +204,9 @@ public class Node implements Serializable {
     }
 
     public void addToLockedMembers(int nodeId){
-        this.lockedQuoMemebrs.add(nodeId);
+        if (!this.lockedQuoMemebrs.contains(nodeId)) {
+            this.lockedQuoMemebrs.add(nodeId);
+        }
     }
 
     public MaekawaProtocol getMkwp() {
@@ -201,12 +217,10 @@ public class Node implements Serializable {
         this.mkwp = mkwp;
     }
 
-    public void addReqToOutstandingQueue(Request req){
-        this.waitQueue.add(req);
-    }
-
-    public void setLocked(boolean locked) {
-        isLocked = locked;
+    public void addReqToOutstandingQueue(Request req) {
+        if (!this.waitQueue.contains(req)) {
+            this.waitQueue.add(req);
+        }
     }
 
     public Condition getCsGrant(){
@@ -227,11 +241,22 @@ public class Node implements Serializable {
 
     public long countLockedReplies() {
         return repliesMap.values().stream()
-                .filter(m -> m.type == MessageType.LOCKED)
+                .filter(m -> m.type == LOCKED)
+                .count();
+    }
+
+    public long countFailedReplies() {
+        return repliesMap.values().stream()
+                .filter(m -> m.type == FAILED)
                 .count();
     }
 
     public int getNumReqPerNode() {
         return this.numReqPerNode;
+    }
+
+    @Override
+    public String toString() {
+        return "Node{id=" + nodeId + ", host=" + hostName + ", port=" + port + "}";
     }
 }
