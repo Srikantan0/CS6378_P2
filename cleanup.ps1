@@ -52,7 +52,7 @@ for ($i = 0; $i -lt $n; $i++) {
 
     Write-Host "[DEBUG] Cleanup on Node $i config: id=$id host=$hostName port=$port"
     Write-Host "[DEBUG] ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no `"$sshTarget`" `"rm -rf $OUTPUTDIR/ && killall -u $netid`""
-    ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $sshTarget "rm -rf $OUTPUTDIR/ node*.log && killall -u $netid"
+    ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $sshTarget "rm -rf $OUTPUTDIR/ ~/output/ node*.log && killall -u $netid"
 }
 
 Write-Host "Cleanup complete"
