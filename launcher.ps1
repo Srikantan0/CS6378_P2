@@ -25,15 +25,13 @@ $NODES = @()
 
 foreach ($line in $CONFIG) {
     if ($i -eq 0) {
-        # Global parameters: n minPerActive maxPerActive minSendDelay snapshotDelay maxNumber
+        # Global parameters: n interRequestDelay csExecutionTime numOfRequests
         $tokens = $line -split '\s+'
         $n = [int]$tokens[0]
-        $minPerActive = $tokens[1]
-        $maxPerActive = $tokens[2]
-        $minSendDelay = $tokens[3]
-        $snapshotDelay = $tokens[4]
-        $maxNumber = $tokens[5]
-        Write-Host "[DEBUG] Global Params: {$n, $minPerActive, $maxPerActive, $minSendDelay, $snapshotDelay, $maxNumber}"
+        $interRequestDelay = $tokens[1]
+        $csExecutionTime = $tokens[2]
+        $numOfRequests = $tokens[3]
+        Write-Host "[DEBUG] Global Params: {$n, $interRequestDelay, $csExecutionTime, $numOfRequests}"
     }
     elseif ($i -le $n) {
         $NODES += $line
